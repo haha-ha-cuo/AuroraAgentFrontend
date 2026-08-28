@@ -1,23 +1,23 @@
 <script setup lang="ts">
-import { NLayout, NLayoutContent, NLayoutSider } from 'naive-ui'
+import { NLayout, NLayoutContent, NLayoutSider } from "naive-ui";
 
-const ui = useUiStore()
-const compact = ref(false)
-const collapsed = computed(() => compact.value || ui.sidebarCollapsed)
-const edgeLeft = computed(() => `${8 + (collapsed.value ? 68 : 280) - 6}px`)
-let compactQuery: MediaQueryList | null = null
+const ui = useUiStore();
+const compact = ref(false);
+const collapsed = computed(() => compact.value || ui.sidebarCollapsed);
+const edgeLeft = computed(() => `${8 + (collapsed.value ? 68 : 280) - 6}px`);
+let compactQuery: MediaQueryList | null = null;
 
 function syncCompact(event?: MediaQueryListEvent) {
-  compact.value = event?.matches ?? compactQuery?.matches ?? false
+  compact.value = event?.matches ?? compactQuery?.matches ?? false;
 }
 
 onMounted(() => {
-  compactQuery = window.matchMedia('(max-width: 860px)')
-  syncCompact()
-  compactQuery.addEventListener('change', syncCompact)
-})
+  compactQuery = window.matchMedia("(max-width: 860px)");
+  syncCompact();
+  compactQuery.addEventListener("change", syncCompact);
+});
 
-onBeforeUnmount(() => compactQuery?.removeEventListener('change', syncCompact))
+onBeforeUnmount(() => compactQuery?.removeEventListener("change", syncCompact));
 </script>
 
 <template>
@@ -45,7 +45,10 @@ onBeforeUnmount(() => compactQuery?.removeEventListener('change', syncCompact))
     >
       <span />
     </div>
-    <NLayoutContent class="app-content" content-style="height: 100%; overflow: hidden;">
+    <NLayoutContent
+      class="app-content"
+      content-style="height: 100%; overflow: hidden;"
+    >
       <slot />
     </NLayoutContent>
   </NLayout>
@@ -75,8 +78,20 @@ onBeforeUnmount(() => compactQuery?.removeEventListener('change', syncCompact))
   outline: none;
 }
 
-.sidebar-edge span { width: 1px; height: 42px; border-radius: 1px; background: transparent; transition: background 120ms ease, height 120ms ease; }
-.sidebar-edge:hover span, .sidebar-edge:focus-visible span { height: 64px; background: var(--text-muted); }
+.sidebar-edge span {
+  width: 1px;
+  height: 42px;
+  border-radius: 1px;
+  background: transparent;
+  transition:
+    background 120ms ease,
+    height 120ms ease;
+}
+.sidebar-edge:hover span,
+.sidebar-edge:focus-visible span {
+  height: 64px;
+  background: var(--text-muted);
+}
 
 .app-sider {
   height: calc(100vh - 16px);
@@ -108,9 +123,15 @@ onBeforeUnmount(() => compactQuery?.removeEventListener('change', syncCompact))
 }
 
 @media (max-width: 680px) {
-  .app-shell { padding: 5px; gap: 5px; }
-  .app-content { margin-left: 5px; }
-  .app-sider, .app-content {
+  .app-shell {
+    padding: 5px;
+    gap: 5px;
+  }
+  .app-content {
+    margin-left: 5px;
+  }
+  .app-sider,
+  .app-content {
     height: calc(100dvh - 10px);
     border-radius: 13px;
   }
