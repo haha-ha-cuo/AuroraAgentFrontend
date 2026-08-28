@@ -18,7 +18,7 @@ const label = computed(() => ({
         <span class="status-label">{{ label }}</span>
       </span>
     </template>
-    {{ runtime.settings.model || label }}
+    {{ label }}
   </NTooltip>
 </template>
 

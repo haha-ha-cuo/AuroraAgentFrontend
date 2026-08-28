@@ -34,7 +34,7 @@ async function submit(objective: string, attachments: AttachmentRef[]) {
       <ConversationView :session="session" />
       <div class="session-composer">
         <NAlert v-if="runtime.connectionStatus === 'disconnected'" type="warning" :show-icon="false" class="disconnect-alert">运行时已断开。历史仍可浏览，恢复连接后可继续对话。</NAlert>
-        <MessageComposer :disabled="runtime.connectionStatus !== 'connected'" :loading="running" placeholder="继续这个会话…" @submit="submit" @stop="runtime.cancelRun(session.id)" />
+        <MessageComposer :disabled="runtime.connectionStatus !== 'connected'" :loading="running" placeholder="继续这个会话…" @submit="submit" />
       </div>
     </template>
     <div v-else class="center-state"><NEmpty description="没有找到这个会话"><template #extra><NButton @click="navigateTo('/')">返回新对话</NButton></template></NEmpty></div>

@@ -13,8 +13,8 @@ use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager};
 
 const PROTOCOL_VERSION: u64 = 1;
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
-const KEYRING_SERVICE: &str = "com.demo.agent";
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
+const KEYRING_SERVICE: &str = "com.aurora.agent";
 const KEYRING_USER: &str = "model-api-key";
 
 type Reply = Result<Value, String>;
@@ -145,7 +145,7 @@ impl RuntimeBroker {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         if let Some(secret) = read_secret() {
-            command.env("DEMO_AGENT_API_KEY", secret);
+        command.env("AGENT_API_KEY", secret);
         }
 
         let mut child = command.spawn().map_err(|error| {
@@ -402,7 +402,7 @@ fn validate_request(request: &Value) -> Result<(), String> {
 }
 
 fn runtime_command(resource_dir: &Path) -> (Command, PathBuf) {
-    if let Ok(executable) = std::env::var("DEMO_AGENT_SIDECAR") {
+    if let Ok(executable) = std::env::var("AURORA_SIDECAR") {
         let path = PathBuf::from(executable);
         let cwd = path
             .parent()
@@ -421,22 +421,22 @@ fn runtime_command(resource_dir: &Path) -> (Command, PathBuf) {
     });
     if python.exists() {
         let mut command = Command::new(python);
-        command.args(["-m", "demo_agent", "--stdio"]);
+        command.args(["-m", "aurora.cli.main", "runtime"]);
         command.env("PYTHONPATH", sidecar.join("site-packages"));
         return (command, resource_dir.to_path_buf());
     }
 
-    let repo_root = std::env::var_os("DEMO_AGENT_ROOT")
+    let repo_root = std::env::var_os("AURORA_ROOT")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .parent()
                 .and_then(Path::parent)
-                .map(|path| path.join("demo"))
-                .unwrap_or_else(|| PathBuf::from("../demo"))
+                .map(|path| path.join("AuroraApp"))
+                .unwrap_or_else(|| PathBuf::from("../AuroraApp"))
         });
     let mut command = Command::new("uv");
-    command.args(["run", "--no-sync", "python", "-m", "demo_agent", "--stdio"]);
+    command.args(["run", "--no-sync", "aurora", "runtime"]);
     (command, repo_root)
 }
 

@@ -31,6 +31,7 @@ export interface TaskNode {
   runId: string
   parentId: string | null
   description: string
+  tool: string
   effort: TaskEffort
   status: TaskStatus
   output: string
@@ -54,6 +55,9 @@ export interface RunRecord {
 export interface ProjectRecord {
   id: string
   name: string
+  path: string
+  isGitRepository: boolean
+  writable: boolean
   createdAt: string
   updatedAt: string
 }
@@ -80,6 +84,9 @@ export interface ApprovalRequest {
   risk: string
   details?: string
   status: 'pending' | 'approved' | 'rejected' | 'expired'
+  kind?: 'approval' | 'clarification' | 'evaluation'
+  question?: string
+  interruptId?: string
 }
 
 export interface RuntimeInfo {
@@ -88,6 +95,21 @@ export interface RuntimeInfo {
   version: string
   databasePath: string
   activeRuns: number
+  capabilities?: string[]
+}
+
+export interface McpPackage {
+  id: string
+  name: string
+  version: string
+  description: string
+  configSchema: Record<string, unknown>
+}
+
+export interface McpConnection {
+  name: string
+  packageId?: string | null
+  tools: Array<{ name: string; description: string; risk: string }>
 }
 
 export interface ModelSettings {

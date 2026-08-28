@@ -1,24 +1,51 @@
 <script setup lang="ts">
-import { NButton, NCard, NDescriptions, NDescriptionsItem, NForm, NFormItem, NIcon, NInput, NRadioButton, NRadioGroup, NSelect, NTag, useDialog, useMessage } from 'naive-ui'
-import { Database, DeviceDesktop, Refresh, ShieldLock, Trash } from '@vicons/tabler'
-import type { ThemePreference } from '~/types/agent'
+import { NAlert, NButton, NCard, NDescriptions, NDescriptionsItem, NFormItem, NIcon, NInput, NRadioButton, NRadioGroup, NTag, useMessage } from 'naive-ui'
+import { DeviceDesktop, PlugConnected, Refresh } from '@vicons/tabler'
+import type { McpPackage, ThemePreference } from '~/types/agent'
 
-const sessions = useSessionStore(); const runtime = useRuntimeStore(); const ui = useUiStore()
-const dialog = useDialog(); const message = useMessage(); const saving = ref(false); const restarting = ref(false)
-const form = reactive({ provider: 'mock', baseUrl: '', model: '', apiKey: '' })
-const desktopMode = computed(() => import.meta.client && '__TAURI_INTERNALS__' in window)
-watch(() => runtime.settings, (settings) => Object.assign(form, { provider: settings.provider, baseUrl: settings.baseUrl, model: settings.model, apiKey: '' }), { immediate: true, deep: true })
+const runtime = useRuntimeStore()
+const ui = useUiStore()
+const message = useMessage()
+const restarting = ref(false)
+const connecting = ref('')
+const packageConfig = reactive<Record<string, string>>({})
+const instanceNames = reactive<Record<string, string>>({})
+const serverConfig = ref('{\n  "name": "custom",\n  "command": "uvx",\n  "args": []\n}')
 useHead({ title: '设置' })
 
-async function save() {
-  saving.value = true
-  try { await runtime.saveSettings({ ...form }); form.apiKey = ''; message.success('模型设置已安全保存') }
-  catch (error) { message.error(error instanceof Error ? error.message : String(error)) }
-  finally { saving.value = false }
+onMounted(() => runtime.loadMcp().catch((error) => message.error(String(error))))
+
+function defaultConfig(pkg: McpPackage) {
+  const properties = (pkg.configSchema as any)?.properties ?? {}
+  return Object.fromEntries(Object.entries(properties).flatMap(([key, value]: [string, any]) => Object.hasOwn(value, 'default') ? [[key, value.default]] : []))
 }
-async function restart() { restarting.value = true; try { await runtime.restart(); message.success('运行时已重启') } catch (error) { message.error(String(error)) } finally { restarting.value = false } }
-function confirmClear() {
-  dialog.warning({ title: '清除全部历史？', content: `SQLite 中的 ${sessions.sessions.length} 个会话及其运行记录将永久删除。模型密钥不会受影响。`, positiveText: '清除', negativeText: '取消', onPositiveClick: async () => { await sessions.clearAll(); message.success('历史已清除'); await navigateTo('/') } })
+
+function configText(pkg: McpPackage) {
+  if (!packageConfig[pkg.id]) packageConfig[pkg.id] = JSON.stringify(defaultConfig(pkg), null, 2)
+  return packageConfig[pkg.id] ?? '{}'
+}
+
+async function connectPackage(pkg: McpPackage) {
+  connecting.value = pkg.id
+  try {
+    await runtime.connectPackage(pkg.id, instanceNames[pkg.id] || pkg.id, JSON.parse(packageConfig[pkg.id] ?? configText(pkg)))
+    message.success(`${pkg.name} 已连接；新建会话后可使用其工具`)
+  } catch (error) { message.error(error instanceof Error ? error.message : String(error)) }
+  finally { connecting.value = '' }
+}
+
+async function connectServer() {
+  connecting.value = 'server'
+  try { await runtime.connectServer(JSON.parse(serverConfig.value)); message.success('MCP Server 已连接') }
+  catch (error) { message.error(error instanceof Error ? error.message : String(error)) }
+  finally { connecting.value = '' }
+}
+
+async function restart() {
+  restarting.value = true
+  try { await runtime.restart(); await runtime.loadMcp(); message.success('运行时已重启，内存会话已清空') }
+  catch (error) { message.error(String(error)) }
+  finally { restarting.value = false }
 }
 </script>
 
@@ -30,36 +57,43 @@ function confirmClear() {
         <div class="setting-row"><div><strong>主题</strong><p>可跟随系统，也可锁定浅色或深色。</p></div><NRadioGroup :value="ui.theme" size="small" @update:value="ui.setTheme($event as ThemePreference)"><NRadioButton value="system">系统</NRadioButton><NRadioButton value="light">浅色</NRadioButton><NRadioButton value="dark">深色</NRadioButton></NRadioGroup></div>
       </NCard>
 
-      <NCard title="模型"><template #header-extra><NIcon :component="ShieldLock" :size="18" /></template>
-        <NForm label-placement="top" class="model-form">
-          <div class="form-grid">
-            <NFormItem label="Provider"><NSelect v-model:value="form.provider" :options="[{label:'Mock（无需密钥）',value:'mock'},{label:'OpenAI 兼容',value:'openai'}]" /></NFormItem>
-            <NFormItem label="模型"><NInput v-model:value="form.model" placeholder="例如 gpt-5" /></NFormItem>
-          </div>
-          <NFormItem label="Base URL"><NInput v-model:value="form.baseUrl" placeholder="https://api.openai.com/v1" /></NFormItem>
-          <NFormItem label="API Key"><NInput v-model:value="form.apiKey" type="password" show-password-on="click" :disabled="!desktopMode" :placeholder="!desktopMode ? '浏览器开发模式请通过环境变量配置' : runtime.settings.hasApiKey ? '已存入系统钥匙串；留空保持不变' : '仅写入系统钥匙串'" autocomplete="new-password" /></NFormItem>
-          <div class="form-actions"><span>Provider 选择「Mock」即启用确定性 Mock 模式</span><NButton type="primary" :loading="saving" @click="save">保存设置</NButton></div>
-        </NForm>
-      </NCard>
-
-      <NCard title="Agent 运行时">
+      <NCard title="Aurora 运行时">
         <NDescriptions label-placement="left" :column="1" size="small">
           <NDescriptionsItem label="连接"><NTag size="small" :bordered="false">{{ runtime.connectionStatus }}</NTag></NDescriptionsItem>
-          <NDescriptionsItem label="模式">{{ runtime.info.mode || '—' }}</NDescriptionsItem>
-          <NDescriptionsItem label="活跃运行">{{ runtime.info.activeRuns }}</NDescriptionsItem>
-          <NDescriptionsItem label="数据库"><span class="db-path">{{ runtime.info.databasePath || '等待运行时上报' }}</span></NDescriptionsItem>
+          <NDescriptionsItem label="协议">v{{ runtime.info.version }}</NDescriptionsItem>
+          <NDescriptionsItem label="传输">{{ runtime.info.mode }}</NDescriptionsItem>
+          <NDescriptionsItem label="接口数">{{ runtime.info.capabilities?.length || 0 }}</NDescriptionsItem>
         </NDescriptions>
-        <NButton class="restart-button" secondary :loading="restarting" @click="restart"><template #icon><NIcon :component="Refresh" /></template>重启运行时</NButton>
+        <NAlert type="info" :show-icon="false" class="runtime-note">模型由后端根目录的 <code>.env</code> 配置：AGENT_API_KEY、AGENT_BASE_URL、AGENT_MODEL。</NAlert>
+        <NButton secondary :loading="restarting" @click="restart"><template #icon><NIcon :component="Refresh" /></template>重启运行时</NButton>
       </NCard>
 
-      <NCard title="本地数据"><template #header-extra><NIcon :component="Database" :size="18" /></template>
-        <div class="setting-row"><div><strong>会话历史</strong><p>SQLite 保存 {{ sessions.sessions.length }} 个会话；localStorage 仅保留界面偏好和迁移标记。</p></div><NButton type="error" secondary :disabled="!sessions.sessions.length" @click="confirmClear"><template #icon><NIcon :component="Trash" /></template>清除</NButton></div>
+      <NCard title="MCP 功能包"><template #header-extra><NIcon :component="PlugConnected" :size="18" /></template>
+        <NAlert v-if="Object.keys(runtime.pluginErrors).length" type="warning" :show-icon="false">{{ runtime.pluginErrors }}</NAlert>
+        <article v-for="pkg in runtime.packages" :key="pkg.id" class="package-card">
+          <div class="package-head"><div><strong>{{ pkg.name }}</strong><span>v{{ pkg.version }}</span><p>{{ pkg.description }}</p></div><NTag v-if="runtime.connections.some((item) => item.packageId === pkg.id)" type="success" size="small">已连接</NTag></div>
+          <div v-if="!runtime.connections.some((item) => item.packageId === pkg.id)" class="package-form">
+            <NFormItem label="实例名"><NInput v-model:value="instanceNames[pkg.id]" :placeholder="pkg.id" /></NFormItem>
+            <NFormItem label="配置 JSON"><NInput :value="configText(pkg)" type="textarea" :autosize="{ minRows: 3, maxRows: 8 }" @update:value="packageConfig[pkg.id] = $event" /></NFormItem>
+            <NButton type="primary" :loading="connecting === pkg.id" @click="connectPackage(pkg)">连接</NButton>
+          </div>
+          <div v-else class="connections">
+            <div v-for="item in runtime.connections.filter((entry) => entry.packageId === pkg.id)" :key="item.name"><span>{{ item.name }} · {{ item.tools.length }} 个工具</span><NButton size="tiny" secondary type="error" @click="runtime.disconnectPackage(item.name)">断开</NButton></div>
+          </div>
+        </article>
       </NCard>
-      <NCard title="关于"><NDescriptions label-placement="left" :column="1" size="small"><NDescriptionsItem label="产品">Demo Agent</NDescriptionsItem><NDescriptionsItem label="版本">0.1.0</NDescriptionsItem><NDescriptionsItem label="协议">Runtime Protocol v1</NDescriptionsItem></NDescriptions></NCard>
+
+      <NCard title="底层 MCP Server">
+        <NFormItem label="Server 配置 JSON"><NInput v-model:value="serverConfig" type="textarea" :autosize="{ minRows: 4, maxRows: 10 }" /></NFormItem>
+        <NButton type="primary" :loading="connecting === 'server'" @click="connectServer">连接 Server</NButton>
+        <div class="connections">
+          <div v-for="item in runtime.serverConnections.filter((entry) => !entry.packageId)" :key="item.name"><span>{{ item.name }} · {{ item.tools.length }} 个工具</span><NButton size="tiny" secondary type="error" @click="runtime.disconnectServer(item.name)">断开</NButton></div>
+        </div>
+      </NCard>
     </div>
   </main>
 </template>
 
 <style scoped>
-.settings-page{width:100%;height:100%;overflow:auto;padding:44px 36px 64px}.settings-header,.settings-grid{width:min(780px,100%);margin-right:auto;margin-left:auto}.settings-header{margin-bottom:21px}.settings-header p{margin:0 0 5px;color:var(--text-muted);font-size:11px;font-weight:650;letter-spacing:.06em}.settings-header h1{margin:0;font-size:27px;letter-spacing:-.03em}.settings-grid{display:grid;gap:12px}.settings-grid :deep(.n-card){border-radius:11px;background:var(--surface)}.setting-row{display:flex;align-items:center;justify-content:space-between;gap:20px}.setting-row strong{font-size:13px}.setting-row p{margin:4px 0 0;color:var(--text-muted);font-size:12px;line-height:1.5}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.model-form :deep(.n-form-item){margin-bottom:7px}.form-actions{display:flex;align-items:center;justify-content:space-between;color:var(--text-muted);font-size:12px}.restart-button{margin-top:14px}.db-path{overflow-wrap:anywhere;color:var(--text-muted);font-size:11px}@media(max-width:680px){.settings-page{padding:32px 16px 48px}.setting-row{align-items:flex-start;flex-direction:column}.form-grid{grid-template-columns:1fr}}
+.settings-page{width:100%;height:100%;overflow:auto;padding:44px 36px 64px}.settings-header,.settings-grid{width:min(780px,100%);margin-right:auto;margin-left:auto}.settings-header{margin-bottom:21px}.settings-header p{margin:0 0 5px;color:var(--text-muted);font-size:11px;font-weight:650;letter-spacing:.06em}.settings-header h1{margin:0;font-size:27px;letter-spacing:-.03em}.settings-grid{display:grid;gap:12px}.settings-grid :deep(.n-card){border-radius:11px;background:var(--surface)}.setting-row{display:flex;align-items:center;justify-content:space-between;gap:20px}.setting-row strong,.package-card strong{font-size:13px}.setting-row p,.package-card p{margin:4px 0 0;color:var(--text-muted);font-size:12px;line-height:1.5}.runtime-note{margin:14px 0}.package-card{padding:14px 0;border-bottom:1px solid var(--border)}.package-card:last-child{border-bottom:0}.package-head{display:flex;justify-content:space-between;gap:12px}.package-head span{margin-left:8px;color:var(--text-muted);font-size:10px}.package-form{margin-top:12px;padding:12px;border-radius:8px;background:var(--surface-muted)}.package-form :deep(.n-form-item){margin-bottom:8px}.connections{display:grid;gap:7px;margin-top:10px}.connections>div{display:flex;align-items:center;justify-content:space-between;color:var(--text-muted);font-size:12px}@media(max-width:680px){.settings-page{padding:32px 16px 48px}.setting-row{align-items:flex-start;flex-direction:column}}
 </style>

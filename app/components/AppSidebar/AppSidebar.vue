@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { NButton, NDropdown, NIcon, NScrollbar, NTooltip, useDialog, useMessage } from 'naive-ui'
 import { Apps, Bell, ChevronDown, ChevronRight, Clock, Dots, Edit, Folder, FolderPlus, GitPullRequest, Plus, Puzzle, Search, Settings } from '@vicons/tabler'
+import { isTauri } from '~/utils/runtimeClient'
 import type { ProjectRecord, SessionRecord, TaskNode } from '~/types/agent'
 
 const props = defineProps<{ collapsed?: boolean }>()
@@ -63,10 +64,15 @@ function sessionMenuOptions(session: SessionRecord) {
 }
 
 async function createProject() {
-  const name = window.prompt('输入新项目名称')?.trim()
-  if (!name) return
+  let path: string | null = null
+  if (isTauri()) {
+    const { open } = await import('@tauri-apps/plugin-dialog')
+    const selected = await open({ directory: true, multiple: false })
+    path = typeof selected === 'string' ? selected : null
+  } else path = window.prompt('输入工作区绝对路径')?.trim() || null
+  if (!path) return
   try {
-    const project = await projects.create(name)
+    const project = await projects.create(path)
     await navigateTo(`/projects/${project.id}`)
   } catch (error) { message.error(String(error)) }
 }
@@ -118,8 +124,8 @@ async function handleSessionMenu(key: string, session: SessionRecord) {
 <template>
   <aside class="sidebar" :class="{ collapsed }">
     <div class="brand-row">
-      <span class="brand-mark"><img src="/logo.svg" alt="Demo Agent" /></span>
-      <strong v-if="!collapsed" class="brand-name">Demo Agent</strong>
+      <span class="brand-mark"><img src="/logo.svg" alt="Aurora Agent" /></span>
+      <strong v-if="!collapsed" class="brand-name">Aurora Agent</strong>
       <template v-if="!collapsed">
         <NButton quaternary circle size="tiny" class="brand-action" aria-label="搜索" @click="showUnavailable('搜索')"><template #icon><NIcon :component="Search" :size="17" /></template></NButton>
         <NButton quaternary circle size="tiny" class="brand-action" aria-label="通知" @click="showUnavailable('通知')"><template #icon><NIcon :component="Bell" :size="17" /></template></NButton>
@@ -146,7 +152,7 @@ async function handleSessionMenu(key: string, session: SessionRecord) {
 
     <section class="projects-section">
       <div class="section-label">
-        <span>项目</span><NIcon :component="ChevronDown" :size="13" />
+        <span>工作区</span><NIcon :component="ChevronDown" :size="13" />
         <NButton v-if="!collapsed" quaternary circle size="tiny" class="new-project-button" aria-label="新建项目" @click="createProject"><template #icon><NIcon :component="FolderPlus" :size="15" /></template></NButton>
       </div>
       <NScrollbar class="projects-scroll">

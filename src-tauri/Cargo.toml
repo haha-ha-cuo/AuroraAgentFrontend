@@ -1,11 +1,11 @@
 [package]
-name = "demo-desktop"
+name = "aurora-desktop"
 version = "0.1.0"
-description = "Demo CodeX-like AI Agent 桌面壳（Tauri 2）"
+description = "Aurora Agent 桌面壳（Tauri 2）"
 edition = "2021"
 
 [lib]
-name = "demo_desktop_lib"
+name = "aurora_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

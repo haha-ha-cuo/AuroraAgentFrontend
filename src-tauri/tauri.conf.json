@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Demo Agent",
+  "productName": "Aurora Agent",
   "version": "0.1.0",
-  "identifier": "com.demo.agent",
+  "identifier": "com.aurora.agent",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://127.0.0.1:3000",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Demo Agent",
+        "title": "Aurora Agent",
         "width": 1200,
         "height": 800
       }

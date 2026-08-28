@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKEND_ROOT="${DEMO_AGENT_ROOT:-$ROOT/../demo}"
+BACKEND_ROOT="${AURORA_ROOT:-$ROOT/../AuroraApp}"
 cd "$ROOT"
 
 PYTHON_VERSION="${PYTHON_VERSION:-3.13}"

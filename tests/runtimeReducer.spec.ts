@@ -15,4 +15,20 @@ describe('runtime event isolation', () => {
     expect(sessions.getSession('b')?.tasks[0]?.status).toBe('running')
     expect(sessions.getSession('a')?.tasks).toHaveLength(0)
   })
+
+  it('appends streamed assistant deltas to one message', async () => {
+    const sessions = useSessionStore()
+    sessions.upsert({ id: 's1', title: '流式会话', runs: [], messages: [], tasks: [] })
+    const runtime = useRuntimeStore()
+    await runtime.handleEvent({ protocol_version: 1, event_id: 'start', type: 'run.started', occurred_at: '2026-01-01', session_id: 's1', run_id: 'r1', payload: { goal: '测试' } })
+    await runtime.handleEvent({ protocol_version: 1, event_id: 'm1', type: 'message.started', occurred_at: '2026-01-01', session_id: 's1', run_id: 'r1', payload: { messageId: 'answer' } })
+    await runtime.handleEvent({ protocol_version: 1, event_id: 'm2', type: 'message.delta', occurred_at: '2026-01-01', session_id: 's1', run_id: 'r1', payload: { messageId: 'answer', delta: '第一段' } })
+    await runtime.handleEvent({ protocol_version: 1, event_id: 'm3', type: 'message.delta', occurred_at: '2026-01-01', session_id: 's1', run_id: 'r1', payload: { messageId: 'answer', delta: '第二段' } })
+    await runtime.handleEvent({ protocol_version: 1, event_id: 'm4', type: 'message.completed', occurred_at: '2026-01-01', session_id: 's1', run_id: 'r1', payload: { messageId: 'answer', content: '第一段第二段' } })
+    await new Promise((resolve) => setTimeout(resolve, 40))
+
+    const message = sessions.getSession('s1')?.messages[0]
+    expect(message?.content).toBe('第一段第二段')
+    expect(message?.status).toBe('completed')
+  })
 })

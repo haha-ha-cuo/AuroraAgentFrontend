@@ -2,107 +2,59 @@ import { defineStore } from 'pinia'
 import type { SessionRecord } from '~/types/agent'
 import { normalizeSession } from '~/utils/normalizers'
 import { runtimeRequest } from '~/utils/runtimeClient'
-
-const unwrap = (value: any, key: string) => value?.[key] ?? value
+import { useProjectStore } from '~/stores/projectStore'
 
 export const useSessionStore = defineStore('sessions', {
-  state: () => ({
-    sessions: [] as SessionRecord[],
-    activeSessionId: null as string | null,
-    loaded: false,
-    loading: false,
-  }),
+  state: () => ({ sessions: [] as SessionRecord[], activeSessionId: null as string | null, loaded: true, loading: false }),
   getters: {
     activeSession: (state) => state.sessions.find((item) => item.id === state.activeSessionId),
-    sorted(state): SessionRecord[] {
-      return [...state.sessions].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-    },
+    sorted(state): SessionRecord[] { return [...state.sessions].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) },
     isRunning: (state) => (sessionId: string) => state.sessions.some((item) => item.id === sessionId && ['running', 'waiting', 'queued'].includes(item.status)),
   },
   actions: {
     getSession(id: string) { return this.sessions.find((item) => item.id === id) },
-    setActive(id: string | null) { this.activeSessionId = id },
-    upsert(raw: unknown): SessionRecord {
-      const source = raw as Record<string, unknown>
-      const session = normalizeSession(source)
+    upsert(raw: unknown) {
+      const session = normalizeSession(raw as Record<string, unknown>)
       const index = this.sessions.findIndex((item) => item.id === session.id)
-      if (index >= 0) {
-        const previous = this.sessions[index]!
-        if (!Object.hasOwn(source, 'messages')) session.messages = previous.messages
-        if (!Object.hasOwn(source, 'runs')) session.runs = previous.runs
-        if (!Object.hasOwn(source, 'tasks') && !Array.isArray(source.runs)) session.tasks = previous.tasks
-        if (!Object.hasOwn(source, 'approvals')) session.approvals = previous.approvals
-        this.sessions[index] = session
-      }
+      if (index >= 0) this.sessions[index] = session
       else this.sessions.push(session)
       return session
     },
-    remove(id: string) {
-      this.sessions = this.sessions.filter((item) => item.id !== id)
-      if (this.activeSessionId === id) this.activeSessionId = null
-    },
-    removeByProject(projectId: string) {
-      this.sessions = this.sessions.filter((item) => item.projectId !== projectId)
-    },
-    async loadAll() {
-      if (this.loading) return
-      this.loading = true
-      try {
-        const result = await runtimeRequest<any>('session.list')
-        const rows = unwrap(result, 'sessions')
-        if (Array.isArray(rows)) {
-          const ids = new Set<string>()
-          for (const row of rows) { const item = this.upsert(row); ids.add(item.id) }
-          this.sessions = this.sessions.filter((item) => ids.has(item.id))
-        } else this.sessions = []
-        this.loaded = true
-      } finally { this.loading = false }
-    },
+    setActive(id: string | null) { this.activeSessionId = id },
+    remove(id: string) { this.sessions = this.sessions.filter((item) => item.id !== id); if (this.activeSessionId === id) this.activeSessionId = null },
+    removeByProject(projectId: string) { this.sessions = this.sessions.filter((item) => item.projectId !== projectId) },
+    async loadAll() {},
     async load(id: string) {
-      const result = await runtimeRequest<any>('session.get', { session_id: id })
-      const session = this.upsert(unwrap(result, 'session'))
-      useRuntimeStore().restoreApprovals(session.approvals)
+      const session = this.getSession(id)
+      if (!session) throw new Error('会话不存在；后端重启后请新建会话')
       return session
     },
     async create(title = '新对话', projectId?: string | null) {
-      const result = await runtimeRequest<any>('session.create', { title, project_id: projectId || undefined })
-      const session = this.upsert(unwrap(result, 'session'))
-      this.activeSessionId = session.id
+      const projects = useProjectStore()
+      const targetId = projectId || projects.activeProjectId || projects.projects[0]?.id
+      const project = targetId ? projects.byId(targetId) : undefined
+      if (!project) throw new Error('请先添加一个工作区')
+      const result = await runtimeRequest<any>('session.create', {
+        workspacePath: project.path, sandboxMode: 'workspace-write', approvalMode: 'interactive',
+      })
+      const now = new Date().toISOString()
+      const session: SessionRecord = {
+        id: String(result.sessionId), title, projectId: project.id, createdAt: now, updatedAt: now,
+        status: 'idle', messages: [], runs: [], tasks: [], approvals: [],
+      }
+      this.sessions.push(session); this.activeSessionId = session.id
       return session
     },
     async rename(id: string, title: string) {
-      const result = await runtimeRequest<any>('session.rename', { session_id: id, title })
-      return this.upsert(unwrap(result, 'session'))
+      const session = this.getSession(id)
+      if (!session) throw new Error('会话不存在')
+      session.title = title; session.updatedAt = new Date().toISOString()
+      return session
     },
-    async delete(id: string) {
-      await runtimeRequest('session.delete', { session_id: id })
-      this.remove(id)
-    },
+    async delete(id: string) { await runtimeRequest('session.close', { sessionId: id }).catch(() => {}); this.remove(id) },
     async clearAll() {
-      await runtimeRequest('session.clear')
-      this.sessions = []
-      this.activeSessionId = null
-    },
-    async importLegacy() {
-      if (!import.meta.client) return
-      const storageKey = 'demo-agent:sessions:v1'
-      const markerKey = 'demo-agent:sqlite-migration:v1'
-      if (localStorage.getItem(markerKey)) return
-      const raw = localStorage.getItem(storageKey)
-      if (!raw) { localStorage.setItem(markerKey, 'empty'); return }
-      try {
-        const payload = JSON.parse(raw)
-        const result = await runtimeRequest<any>('session.import_legacy', {
-          import_id: 'local-storage-v1', sessions: Array.isArray(payload?.sessions) ? payload.sessions : [],
-        })
-        if (result?.failed === 0 || result?.ok === true) {
-          localStorage.setItem(markerKey, new Date().toISOString())
-          localStorage.removeItem(storageKey)
-          await this.loadAll()
-        }
-      } catch (error) {
-        console.warn('[migration] 旧会话暂未迁移，将在下次启动重试', error)
-      }
+      await Promise.all(this.sessions.map((item) => runtimeRequest('session.close', { sessionId: item.id }).catch(() => {})))
+      this.sessions = []; this.activeSessionId = null
     },
   },
 })

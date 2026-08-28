@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { NButton, NDescriptions, NDescriptionsItem, NDrawer, NDrawerContent, NTag } from 'naive-ui'
+import { NDescriptions, NDescriptionsItem, NDrawer, NDrawerContent, NTag } from 'naive-ui'
 import type { TaskNode } from '~/types/agent'
 
 const model = defineModel<TaskNode | null>('show', { required: true })
-const runtime = useRuntimeStore()
 </script>
 
 <template>
@@ -16,9 +15,6 @@ const runtime = useRuntimeStore()
         <NDescriptionsItem label="输出"><pre>{{ model.output || '暂无输出' }}</pre></NDescriptionsItem>
         <NDescriptionsItem v-if="model.error" label="错误"><span class="error">{{ model.error }}</span></NDescriptionsItem>
       </NDescriptions>
-      <template #footer>
-        <NButton v-if="model.status === 'failed'" type="primary" @click="runtime.retryRun(model.sessionId, model.runId, model.id)">重试此任务</NButton>
-      </template>
     </NDrawerContent>
   </NDrawer>
 </template>

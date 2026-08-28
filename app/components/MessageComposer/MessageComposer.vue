@@ -1,14 +1,13 @@
 <script setup lang="ts">
 import { NButton, NIcon, NInput, NTag, NTooltip } from 'naive-ui'
-import { ArrowUp, Paperclip, PlayerStop } from '@vicons/tabler'
+import { ArrowUp, Paperclip } from '@vicons/tabler'
 import type { AttachmentRef } from '~/types/agent'
-import { isTauri } from '~/utils/runtimeClient'
 
 const props = withDefaults(defineProps<{ disabled?: boolean; loading?: boolean; placeholder?: string }>(), { placeholder: '描述你希望 Agent 完成的任务' })
 const emit = defineEmits<{ submit: [objective: string, attachments: AttachmentRef[]]; stop: [] }>()
 const value = ref('')
 const attachments = ref<AttachmentRef[]>([])
-const desktopFilesAvailable = computed(() => isTauri())
+const desktopFilesAvailable = computed(() => false)
 const resolvedPlaceholder = computed(() => props.loading ? '可以停止当前运行，或切换到其他会话' : props.disabled ? '运行时未连接，仍可浏览历史' : props.placeholder)
 
 async function chooseFiles() {
@@ -33,9 +32,9 @@ function onKeydown(event: KeyboardEvent) { if (event.key === 'Enter' && !event.s
     <div v-if="attachments.length" class="attachments"><NTag v-for="item in attachments" :key="item.id" closable size="small" @close="attachments = attachments.filter((other) => other.id !== item.id)">{{ item.name }}</NTag></div>
     <NInput v-model:value="value" type="textarea" :autosize="{ minRows: 1, maxRows: 6 }" :placeholder="resolvedPlaceholder" :disabled="disabled" class="composer-input" @keydown="onKeydown" />
     <div class="composer-footer">
-      <NTooltip><template #trigger><span><NButton quaternary circle size="small" :disabled="disabled || loading || !desktopFilesAvailable" aria-label="添加文件引用" @click="chooseFiles"><template #icon><NIcon :component="Paperclip" /></template></NButton></span></template>{{ desktopFilesAvailable ? '添加 Markdown/TXT' : '本地文档仅桌面版支持' }}</NTooltip>
+      <NTooltip><template #trigger><span><NButton quaternary circle size="small" disabled aria-label="添加文件引用"><template #icon><NIcon :component="Paperclip" /></template></NButton></span></template>当前后端暂不支持附件</NTooltip>
       <span class="composer-hint">Enter 发送 · Shift+Enter 换行</span>
-      <NButton v-if="loading" circle secondary type="error" size="small" aria-label="停止运行" @click="emit('stop')"><template #icon><NIcon :component="PlayerStop" /></template></NButton>
+      <NButton v-if="loading" circle secondary size="small" disabled loading aria-label="运行中" />
       <NButton v-else circle type="primary" size="small" :disabled="disabled || !value.trim()" aria-label="发送" @click="submit"><template #icon><NIcon :component="ArrowUp" /></template></NButton>
     </div>
   </div>

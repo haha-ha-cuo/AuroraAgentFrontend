@@ -42,7 +42,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => mediaQuery?.removeEventListener('change', syncTheme))
 
-useHead({ titleTemplate: (title) => title ? `${title} · Demo Agent` : 'Demo Agent' })
+useHead({ titleTemplate: (title) => title ? `${title} · Aurora Agent` : 'Aurora Agent' })
 </script>
 
 <template>

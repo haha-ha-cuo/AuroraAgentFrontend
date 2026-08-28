@@ -14,12 +14,12 @@ export default function devBackend(_inlineOptions: unknown, nuxt: NuxtLike) {
   if (process.env.TAURI_ENV_PLATFORM) return
   if (process.env.VITE_RUNTIME_WS && process.env.VITE_RUNTIME_WS !== DEFAULT_WS) return
 
-  const backendRoot = process.env.DEMO_AGENT_ROOT
-    ?? fileURLToPath(new URL('../../demo', import.meta.url))
+  const backendRoot = process.env.AURORA_ROOT
+    ?? fileURLToPath(new URL('../../AuroraApp', import.meta.url))
 
   nuxt.hook('listen', () => {
     if (child) return
-    child = spawn('uv', ['run', '--no-sync', 'python', '-m', 'demo_agent', '--port', '8765'], {
+    child = spawn('uv', ['run', '--no-sync', 'aurora', 'runtime', '--port', '8765'], {
       cwd: backendRoot,
       stdio: 'inherit',
       env: process.env,

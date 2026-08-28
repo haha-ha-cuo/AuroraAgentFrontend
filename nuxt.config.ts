@@ -5,7 +5,7 @@ export default defineNuxtConfig({
   ssr: false,
   telemetry: false,
   devtools: { enabled: false },
-  modules: ['@pinia/nuxt'],
+  modules: ['@pinia/nuxt', './modules/dev-backend'],
   components: [{ path: '~/components', pathPrefix: false }],
   css: ['~/assets/main.css'],
   router: {

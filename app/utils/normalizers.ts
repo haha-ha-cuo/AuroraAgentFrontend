@@ -54,6 +54,7 @@ export function normalizeTask(raw: Json, sessionId: string, runId = ''): TaskNod
     runId: text(raw.run_id ?? raw.runId, runId),
     parentId: text(raw.parent_id ?? raw.parentId) || null,
     description: text(raw.description, '未命名任务'),
+    tool: text(raw.tool),
     effort: ['low', 'medium', 'high'].includes(raw.effort) ? raw.effort : 'medium',
     status: raw.status ?? 'queued', output: text(raw.output), error: text(raw.error),
     createdAt: text(raw.created_at ?? raw.createdAt), updatedAt: text(raw.updated_at ?? raw.updatedAt),
@@ -64,6 +65,9 @@ export function normalizeProject(raw: Json): ProjectRecord {
   return {
     id: text(raw.id),
     name: text(raw.name, '未命名项目'),
+    path: text(raw.path),
+    isGitRepository: Boolean(raw.isGitRepository ?? raw.is_git_repository),
+    writable: Boolean(raw.writable),
     createdAt: text(raw.created_at ?? raw.createdAt, new Date().toISOString()),
     updatedAt: text(raw.updated_at ?? raw.updatedAt, new Date().toISOString()),
   }
@@ -96,6 +100,7 @@ export function normalizeRuntime(raw: Json): RuntimeInfo {
     status: raw.connected === false || raw.status === 'disconnected' ? 'disconnected' : 'connected',
     mode: text(raw.mode, 'mock'), version: text(raw.version, '1'),
     databasePath: text(raw.database_path ?? raw.databasePath ?? raw.database?.path), activeRuns: Number(raw.active_runs ?? raw.activeRuns ?? 0),
+    capabilities: Array.isArray(raw.capabilities) ? raw.capabilities.map(String) : [],
   }
 }
 
