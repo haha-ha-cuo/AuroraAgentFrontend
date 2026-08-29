@@ -9,9 +9,10 @@ import type {
   TaskNode,
 } from '~/types/agent'
 
-type Json = Record<string, any>
+type Json = Record<string, unknown>
 const text = (value: unknown, fallback = '') => typeof value === 'string' ? value : fallback
 const list = (value: unknown): Json[] => Array.isArray(value) ? value.filter((item): item is Json => !!item && typeof item === 'object') : []
+const choice = <T extends string>(value: unknown, values: readonly T[], fallback: T): T => typeof value === 'string' && values.includes(value as T) ? value as T : fallback
 
 export function normalizeAttachment(raw: Json): AttachmentRef {
   return {
@@ -28,11 +29,11 @@ export function normalizeMessage(raw: Json, sessionId: string): ConversationMess
     id: text(raw.id, crypto.randomUUID()),
     sessionId: text(raw.session_id ?? raw.sessionId, sessionId),
     runId: text(raw.run_id ?? raw.runId) || null,
-    role: ['user', 'assistant', 'system', 'tool'].includes(raw.role) ? raw.role : 'system',
+    role: choice(raw.role, ['user', 'assistant', 'system', 'tool'], 'system'),
     content: text(raw.content),
     createdAt: text(raw.created_at ?? raw.createdAt, new Date().toISOString()),
-    status: ['streaming', 'completed', 'failed'].includes(raw.status) ? raw.status : 'completed',
-    kind: ['message', 'report', 'error', 'tool'].includes(raw.kind) ? raw.kind : 'message',
+    status: choice(raw.status, ['streaming', 'completed', 'failed'], 'completed'),
+    kind: choice(raw.kind, ['message', 'report', 'error', 'tool'], 'message'),
     attachments: list(raw.attachments).map(normalizeAttachment),
   }
 }
@@ -40,7 +41,7 @@ export function normalizeMessage(raw: Json, sessionId: string): ConversationMess
 export function normalizeRun(raw: Json, sessionId: string): RunRecord {
   return {
     id: text(raw.id), sessionId: text(raw.session_id ?? raw.sessionId, sessionId),
-    objective: text(raw.objective), status: raw.status ?? 'queued', error: text(raw.error),
+    objective: text(raw.objective), status: choice(raw.status, ['queued', 'running', 'waiting', 'completed', 'failed', 'cancelled'], 'queued'), error: text(raw.error),
     createdAt: text(raw.created_at ?? raw.createdAt, new Date().toISOString()),
     updatedAt: text(raw.updated_at ?? raw.updatedAt, new Date().toISOString()),
     retryOfRunId: text(raw.retry_of_run_id ?? raw.retryOfRunId) || null,
@@ -55,8 +56,8 @@ export function normalizeTask(raw: Json, sessionId: string, runId = ''): TaskNod
     parentId: text(raw.parent_id ?? raw.parentId) || null,
     description: text(raw.description, '未命名任务'),
     tool: text(raw.tool),
-    effort: ['low', 'medium', 'high'].includes(raw.effort) ? raw.effort : 'medium',
-    status: raw.status ?? 'queued', output: text(raw.output), error: text(raw.error),
+    effort: choice(raw.effort, ['low', 'medium', 'high'], 'medium'),
+    status: choice(raw.status, ['queued', 'running', 'waiting', 'completed', 'failed', 'cancelled'], 'queued'), output: text(raw.output), error: text(raw.error),
     createdAt: text(raw.created_at ?? raw.createdAt), updatedAt: text(raw.updated_at ?? raw.updatedAt),
   }
 }
@@ -84,22 +85,23 @@ export function normalizeSession(raw: Json): SessionRecord {
     projectId: text(raw.project_id ?? raw.projectId) || null,
     createdAt: text(raw.created_at ?? raw.createdAt, new Date().toISOString()),
     updatedAt: text(raw.updated_at ?? raw.updatedAt, new Date().toISOString()),
-    status: raw.status ?? raw.run_status ?? runs.at(-1)?.status ?? 'idle',
+    status: choice(raw.status ?? raw.run_status, ['idle', 'queued', 'running', 'waiting', 'completed', 'failed', 'cancelled'], runs.at(-1)?.status ?? 'idle'),
     messages: list(raw.messages).map((item) => normalizeMessage(item, id)),
     runs,
     tasks: list(raw.tasks).map((item) => normalizeTask(item, id, latestRun)).concat(nestedTasks),
     approvals: list(raw.approvals).map((item) => ({
       id: text(item.id), sessionId: text(item.session_id, id), runId: text(item.run_id), taskId: text(item.task_id) || null,
-      action: text(item.action), risk: text(item.risk), status: item.status ?? 'pending',
+      action: text(item.action), risk: text(item.risk), status: choice(item.status, ['pending', 'approved', 'rejected', 'expired'], 'pending'),
     })),
   }
 }
 
 export function normalizeRuntime(raw: Json): RuntimeInfo {
+  const database = raw.database && typeof raw.database === 'object' ? raw.database as Json : {}
   return {
     status: raw.connected === false || raw.status === 'disconnected' ? 'disconnected' : 'connected',
     mode: text(raw.mode, 'mock'), version: text(raw.version, '1'),
-    databasePath: text(raw.database_path ?? raw.databasePath ?? raw.database?.path), activeRuns: Number(raw.active_runs ?? raw.activeRuns ?? 0),
+    databasePath: text(raw.database_path ?? raw.databasePath ?? database.path), activeRuns: Number(raw.active_runs ?? raw.activeRuns ?? 0),
     capabilities: Array.isArray(raw.capabilities) ? raw.capabilities.map(String) : [],
   }
 }

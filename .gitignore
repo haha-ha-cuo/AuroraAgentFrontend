@@ -6,6 +6,8 @@ node_modules/
 .nitro/
 .cache/
 coverage/
+test-results/
+playwright-report/
 .vite/
 dist
 

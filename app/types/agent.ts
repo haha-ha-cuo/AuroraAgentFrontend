@@ -1,3 +1,5 @@
+import type { PROTOCOL_VERSION } from '~/utils/protocol'
+
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'restarting'
 export type ThemePreference = 'system' | 'light' | 'dark'
 export type TaskEffort = 'low' | 'medium' | 'high'
@@ -121,7 +123,7 @@ export interface ModelSettings {
 }
 
 export interface WireRequest {
-  protocol_version: 1
+  protocol_version: typeof PROTOCOL_VERSION
   request_id: string
   method: string
   params: Record<string, unknown>
@@ -129,7 +131,7 @@ export interface WireRequest {
 
 export interface WireError { code: string; message: string; details?: unknown }
 export interface WireResponse<T = unknown> {
-  protocol_version: 1
+  protocol_version: typeof PROTOCOL_VERSION
   request_id: string
   ok: boolean
   result?: T
@@ -137,7 +139,7 @@ export interface WireResponse<T = unknown> {
 }
 
 export interface RuntimeEvent {
-  protocol_version: 1
+  protocol_version: typeof PROTOCOL_VERSION
   event_id: string
   type: string
   occurred_at: string

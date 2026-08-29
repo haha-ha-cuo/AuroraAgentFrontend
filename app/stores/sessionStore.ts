@@ -4,6 +4,8 @@ import { normalizeSession } from '~/utils/normalizers'
 import { runtimeRequest } from '~/utils/runtimeClient'
 import { useProjectStore } from '~/stores/projectStore'
 
+interface SessionCreateResult { sessionId: string }
+
 export const useSessionStore = defineStore('sessions', {
   state: () => ({ sessions: [] as SessionRecord[], activeSessionId: null as string | null, loaded: true, loading: false }),
   getters: {
@@ -34,7 +36,7 @@ export const useSessionStore = defineStore('sessions', {
       const targetId = projectId || projects.activeProjectId || projects.projects[0]?.id
       const project = targetId ? projects.byId(targetId) : undefined
       if (!project) throw new Error('请先添加一个工作区')
-      const result = await runtimeRequest<any>('session.create', {
+      const result = await runtimeRequest<SessionCreateResult>('session.create', {
         workspacePath: project.path, sandboxMode: 'workspace-write', approvalMode: 'interactive',
       })
       const now = new Date().toISOString()

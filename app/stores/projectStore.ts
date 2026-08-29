@@ -4,6 +4,7 @@ import { runtimeRequest } from '~/utils/runtimeClient'
 import { useSessionStore } from '~/stores/sessionStore'
 
 const storageKey = 'aurora:workspaces:v1'
+interface WorkspaceResult { name: string; path: string; isGitRepository: boolean; writable: boolean }
 
 export const useProjectStore = defineStore('projects', {
   state: () => ({
@@ -36,7 +37,7 @@ export const useProjectStore = defineStore('projects', {
       return project
     },
     async create(path: string) {
-      const workspace = await runtimeRequest<any>('workspace.validate', { path })
+      const workspace = await runtimeRequest<WorkspaceResult>('workspace.validate', { path })
       const existing = this.projects.find((item) => item.path === workspace.path)
       if (existing) { this.activeProjectId = existing.id; this.persist(); return existing }
       const now = new Date().toISOString()

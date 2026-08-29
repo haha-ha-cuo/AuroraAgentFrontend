@@ -12,7 +12,7 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager};
 
-const PROTOCOL_VERSION: u64 = 1;
+use crate::protocol::PROTOCOL_VERSION;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
 const KEYRING_SERVICE: &str = "com.aurora.agent";
 const KEYRING_USER: &str = "model-api-key";
@@ -145,7 +145,7 @@ impl RuntimeBroker {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         if let Some(secret) = read_secret() {
-        command.env("AGENT_API_KEY", secret);
+            command.env("AGENT_API_KEY", secret);
         }
 
         let mut child = command.spawn().map_err(|error| {
@@ -428,16 +428,18 @@ fn runtime_command(resource_dir: &Path) -> (Command, PathBuf) {
 
     let repo_root = std::env::var_os("AURORA_ROOT")
         .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .parent()
-                .and_then(Path::parent)
-                .map(|path| path.join("AuroraApp"))
-                .unwrap_or_else(|| PathBuf::from("../AuroraApp"))
-        });
+        .unwrap_or_else(|| default_backend_root(Path::new(env!("CARGO_MANIFEST_DIR"))));
     let mut command = Command::new("uv");
     command.args(["run", "--no-sync", "aurora", "runtime"]);
     (command, repo_root)
+}
+
+fn default_backend_root(manifest_dir: &Path) -> PathBuf {
+    manifest_dir
+        .parent()
+        .and_then(Path::parent)
+        .map(|path| path.join("AuroraAgentBackend"))
+        .unwrap_or_else(|| PathBuf::from("../AuroraAgentBackend"))
 }
 
 fn set_status(
@@ -596,5 +598,11 @@ mod tests {
     fn redacts_sensitive_diagnostics_but_not_stream_tokens() {
         assert_eq!(redact_text("api_key=secret"), "[敏感信息已隐藏]");
         assert_eq!(redact_text("task token delta"), "task token delta");
+    }
+
+    #[test]
+    fn resolves_backend_beside_frontend_repository() {
+        let root = default_backend_root(Path::new("/workspace/AuroraAgentFrontend/src-tauri"));
+        assert_eq!(root, PathBuf::from("/workspace/AuroraAgentBackend"));
     }
 }

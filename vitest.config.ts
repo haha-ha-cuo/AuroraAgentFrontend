@@ -9,6 +9,13 @@ export default defineConfig({
   },
   test: {
     environment: 'happy-dom',
+    exclude: ['e2e/**', 'node_modules/**'],
     restoreMocks: true,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      include: ['app/stores/**/*.ts', 'app/utils/**/*.ts'],
+      thresholds: { statements: 40, branches: 35, functions: 40, lines: 45 },
+    },
   },
 })

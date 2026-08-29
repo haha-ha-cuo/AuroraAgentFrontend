@@ -1,3 +1,4 @@
+mod protocol;
 mod sidecar;
 
 use serde_json::Value;

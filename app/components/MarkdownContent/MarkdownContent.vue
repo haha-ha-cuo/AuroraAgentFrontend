@@ -18,6 +18,7 @@ watch(() => props.content, async (content) => {
 
 <template>
   <!-- 内容先由 markdown-it 禁用原始 HTML，再经 DOMPurify 清理。 -->
+  <!-- eslint-disable-next-line vue/no-v-html -->
   <div class="markdown-content" v-html="html" />
 </template>
 

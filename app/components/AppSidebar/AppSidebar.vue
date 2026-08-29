@@ -4,7 +4,7 @@ import { Apps, Bell, ChevronDown, ChevronRight, Clock, Dots, Edit, Folder, Folde
 import { isTauri } from '~/utils/runtimeClient'
 import type { ProjectRecord, SessionRecord, TaskNode } from '~/types/agent'
 
-const props = defineProps<{ collapsed?: boolean }>()
+defineProps<{ collapsed?: boolean }>()
 const route = useRoute()
 const sessions = useSessionStore()
 const projects = useProjectStore()
@@ -124,7 +124,7 @@ async function handleSessionMenu(key: string, session: SessionRecord) {
 <template>
   <aside class="sidebar" :class="{ collapsed }">
     <div class="brand-row">
-      <span class="brand-mark"><img src="/logo.svg" alt="Aurora Agent" /></span>
+      <span class="brand-mark"><img src="/logo.svg" alt="Aurora Agent" ></span>
       <strong v-if="!collapsed" class="brand-name">Aurora Agent</strong>
       <template v-if="!collapsed">
         <NButton quaternary circle size="tiny" class="brand-action" aria-label="搜索" @click="showUnavailable('搜索')"><template #icon><NIcon :component="Search" :size="17" /></template></NButton>

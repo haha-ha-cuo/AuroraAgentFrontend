@@ -36,7 +36,7 @@ async function addWorkspace() {
 <template>
   <main class="home-page">
     <section class="welcome">
-      <span class="welcome-mark"><img src="/logo.svg" alt="Aurora Agent" /></span>
+      <span class="welcome-mark"><img src="/logo.svg" alt="Aurora Agent" ></span>
       <h1>今天要完成什么？</h1>
       <p v-if="projects.projects.length">当前工作区：{{ projects.activeProject?.path || projects.projects[0]?.path }}。Aurora 会规划任务、选择推理强度并在该目录中执行。</p>
       <template v-else>

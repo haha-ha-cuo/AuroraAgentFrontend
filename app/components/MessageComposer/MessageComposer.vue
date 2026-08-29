@@ -7,18 +7,8 @@ const props = withDefaults(defineProps<{ disabled?: boolean; loading?: boolean; 
 const emit = defineEmits<{ submit: [objective: string, attachments: AttachmentRef[]]; stop: [] }>()
 const value = ref('')
 const attachments = ref<AttachmentRef[]>([])
-const desktopFilesAvailable = computed(() => false)
 const resolvedPlaceholder = computed(() => props.loading ? '可以停止当前运行，或切换到其他会话' : props.disabled ? '运行时未连接，仍可浏览历史' : props.placeholder)
 
-async function chooseFiles() {
-  if (!desktopFilesAvailable.value) return
-  const { open } = await import('@tauri-apps/plugin-dialog')
-  const paths = await open({ multiple: true, directory: false, filters: [{ name: '文本文件', extensions: ['md', 'markdown', 'txt'] }] })
-  for (const path of Array.isArray(paths) ? paths : paths ? [paths] : []) addAttachment(String(path), String(path).split(/[\\/]/).at(-1) ?? '附件', 0)
-}
-function addAttachment(path: string, name: string, size: number, mediaType?: string) {
-  if (!attachments.value.some((item) => item.path === path)) attachments.value.push({ id: `att_${crypto.randomUUID()}`, path, name, size, mediaType })
-}
 function submit() {
   const objective = value.value.trim()
   if (!objective || props.disabled || props.loading) return

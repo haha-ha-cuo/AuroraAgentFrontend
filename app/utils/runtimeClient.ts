@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import type { RuntimeEvent, WireRequest, WireResponse } from '~/types/agent'
+import { PROTOCOL_VERSION } from '~/utils/protocol'
 
 type EventHandler = (event: RuntimeEvent) => void
 const handlers = new Set<EventHandler>()
@@ -9,7 +10,7 @@ let socket: WebSocket | null = null
 let tauriUnlisten: UnlistenFn | null = null
 let connectPromise: Promise<void> | null = null
 
-export const isTauri = () => import.meta.client && '__TAURI_INTERNALS__' in window
+export const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 const requestId = () => `req_${crypto.randomUUID()}`
 
 function receive(value: unknown) {
@@ -28,7 +29,7 @@ function receive(value: unknown) {
 }
 
 export async function connectRuntime(): Promise<void> {
-  if (!import.meta.client) return
+  if (typeof window === 'undefined') return
   if (connectPromise) return connectPromise
   connectPromise = (async () => {
     if (isTauri()) {
@@ -48,7 +49,7 @@ export async function connectRuntime(): Promise<void> {
         for (const waiter of pending.values()) waiter.reject(new Error('运行时连接已断开'))
         pending.clear()
         handlers.forEach((handler) => handler({
-          protocol_version: 1, event_id: `evt_${crypto.randomUUID()}`, type: 'runtime.disconnected',
+          protocol_version: PROTOCOL_VERSION, event_id: `evt_${crypto.randomUUID()}`, type: 'runtime.disconnected',
           occurred_at: new Date().toISOString(), payload: {},
         }))
       }
@@ -59,7 +60,7 @@ export async function connectRuntime(): Promise<void> {
 
 export async function runtimeRequest<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
   await connectRuntime()
-  const request: WireRequest = { protocol_version: 1, request_id: requestId(), method, params }
+  const request: WireRequest = { protocol_version: PROTOCOL_VERSION, request_id: requestId(), method, params }
   if (isTauri()) {
     const response = await invoke<WireResponse<T>>('runtime_request', { request })
     if (!response.ok) throw new Error(response.error?.message ?? '运行时请求失败')

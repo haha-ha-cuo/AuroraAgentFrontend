@@ -1,13 +1,34 @@
 import { defineStore } from 'pinia'
-import type { ApprovalRequest, AttachmentRef, McpConnection, McpPackage, RuntimeEvent, RuntimeInfo } from '~/types/agent'
+import type { ApprovalRequest, AttachmentRef, McpConnection, McpPackage, RunStatus, RuntimeEvent, RuntimeInfo, TaskEffort } from '~/types/agent'
 import { normalizeTask } from '~/utils/normalizers'
 import { connectRuntime, onRuntimeEvent, restartRuntimeBroker, runtimeRequest } from '~/utils/runtimeClient'
 import { useSessionStore } from '~/stores/sessionStore'
 import { useProjectStore } from '~/stores/projectStore'
+import { PROTOCOL_VERSION_TEXT } from '~/utils/protocol'
 
 let initialized: Promise<void> | null = null
 let unsubscribe: (() => void) | null = null
 const streamBuffers = new Map<string, { sessionId: string; pending: string; finalText?: string; timer?: ReturnType<typeof setTimeout> }>()
+type JsonRecord = Record<string, unknown>
+interface RuntimeUpdate {
+  sessionId: string
+  runId: string
+  status: RunStatus
+  state?: JsonRecord & { goal?: unknown; report?: unknown; tasks?: JsonRecord[]; results?: JsonRecord[] }
+  interruptions?: JsonRecord[]
+}
+interface RuntimeInitializeResult { protocolVersion?: string | number; capabilities?: string[] }
+interface McpCatalogResult { packages?: McpPackage[]; pluginErrors?: Record<string, string> }
+interface McpConnectionsResult { packages?: McpConnection[] }
+interface McpServersResult { servers?: McpConnection[] }
+
+function isRecord(value: unknown): value is JsonRecord {
+  return !!value && typeof value === 'object'
+}
+
+function records(value: unknown): JsonRecord[] {
+  return Array.isArray(value) ? value.filter(isRecord) : []
+}
 
 function flushStreamBuffer(messageId: string) {
   const buffer = streamBuffers.get(messageId)
@@ -45,7 +66,7 @@ function completeStreamMessage(sessionId: string, messageId: string, content: st
 export const useRuntimeStore = defineStore('runtime', {
   state: () => ({
     connectionStatus: 'disconnected' as RuntimeInfo['status'],
-    info: { status: 'disconnected', mode: 'stdio/websocket', version: '1', databasePath: '', activeRuns: 0, capabilities: [] } as RuntimeInfo,
+    info: { status: 'disconnected', mode: 'stdio/websocket', version: PROTOCOL_VERSION_TEXT, databasePath: '', activeRuns: 0, capabilities: [] } as RuntimeInfo,
     approvals: [] as ApprovalRequest[], lastError: '',
     packages: [] as McpPackage[], connections: [] as McpConnection[], serverConnections: [] as McpConnection[], pluginErrors: {} as Record<string, string>,
   }),
@@ -60,8 +81,8 @@ export const useRuntimeStore = defineStore('runtime', {
         try {
           await connectRuntime()
           if (!unsubscribe) unsubscribe = onRuntimeEvent((event) => this.handleEvent(event))
-          const result = await runtimeRequest<any>('runtime.initialize')
-          this.info = { status: 'connected', mode: 'stdio/websocket', version: String(result.protocolVersion ?? '1'), databasePath: '', activeRuns: 0, capabilities: result.capabilities ?? [] }
+          const result = await runtimeRequest<RuntimeInitializeResult>('runtime.initialize')
+          this.info = { status: 'connected', mode: 'stdio/websocket', version: String(result.protocolVersion ?? PROTOCOL_VERSION_TEXT), databasePath: '', activeRuns: 0, capabilities: result.capabilities ?? [] }
           await useProjectStore().loadAll()
           this.connectionStatus = 'connected'
         } catch (error) {
@@ -91,7 +112,7 @@ export const useRuntimeStore = defineStore('runtime', {
       })
       session.status = 'running'; session.updatedAt = now; this.info.activeRuns += 1
       try {
-        const update = await runtimeRequest<any>('run.start', { sessionId, goal })
+        const update = await runtimeRequest<RuntimeUpdate>('run.start', { sessionId, goal })
         this.applyUpdate(update)
         return update
       } catch (error) {
@@ -106,15 +127,15 @@ export const useRuntimeStore = defineStore('runtime', {
     async resumeInput(id: string, response: unknown) {
       const request = this.approvals.find((item) => item.id === id)
       if (!request) throw new Error('待处理请求不存在')
-      const update = await runtimeRequest<any>('run.resume', {
+      const update = await runtimeRequest<RuntimeUpdate>('run.resume', {
         sessionId: request.sessionId, runId: request.runId,
         interruptId: request.interruptId || request.id, response,
       })
-      request.status = response === false || (typeof response === 'object' && response && (response as any).approved === false) ? 'rejected' : 'approved'
+      request.status = response === false || (isRecord(response) && response.approved === false) ? 'rejected' : 'approved'
       this.applyUpdate(update)
     },
     async resolveApproval(id: string, approved: boolean) { await this.resumeInput(id, { approved }) },
-    applyUpdate(update: any) {
+    applyUpdate(update: RuntimeUpdate) {
       const sessions = useSessionStore()
       const session = sessions.getSession(String(update.sessionId ?? ''))
       if (!session) return
@@ -126,13 +147,13 @@ export const useRuntimeStore = defineStore('runtime', {
       const goal = String(update.state?.goal ?? run?.objective ?? '')
       if (run) { run.status = update.status; run.updatedAt = now }
       else session.runs.push({ id: runId, sessionId: session.id, objective: goal, status: update.status, error: '', createdAt: now, updatedAt: now })
-      const results = new Map((update.state?.results ?? []).map((item: any) => [String(item.task_id), item]))
+      const results = new Map((update.state?.results ?? []).map((item) => [String(item.task_id), item]))
       for (const raw of update.state?.tasks ?? []) {
-        const result: any = results.get(String(raw.id))
+        const result = results.get(String(raw.id))
         const task = session.tasks.find((item) => item.id === String(raw.id))
         const next = {
           id: String(raw.id), sessionId: session.id, runId, parentId: null,
-          description: String(raw.description ?? '未命名任务'), tool: String(raw.tool ?? ''), effort: raw.effort ?? 'medium',
+          description: String(raw.description ?? '未命名任务'), tool: String(raw.tool ?? ''), effort: (['low', 'medium', 'high'].includes(String(raw.effort)) ? raw.effort : 'medium') as TaskEffort,
           status: result ? (result.ok ? 'completed' : 'failed') : update.status === 'waiting' ? 'waiting' : 'queued',
           output: String(result?.output ?? ''), error: result?.ok === false ? String(result.output ?? '') : '',
           createdAt: task?.createdAt ?? now, updatedAt: now,
@@ -149,7 +170,7 @@ export const useRuntimeStore = defineStore('runtime', {
       }
       for (const pending of update.interruptions ?? []) this.addInterruption(session.id, runId, pending)
     },
-    addInterruption(sessionId: string, runId: string, pending: any) {
+    addInterruption(sessionId: string, runId: string, pending: JsonRecord) {
       const id = String(pending.interruptId ?? '')
       if (!id || this.approvals.some((item) => item.id === id)) return
       const kind = pending.kind === 'clarification' || pending.kind === 'evaluation' ? pending.kind : 'approval'
@@ -162,7 +183,7 @@ export const useRuntimeStore = defineStore('runtime', {
     },
     async handleEvent(event: RuntimeEvent) {
       if (event.type === 'runtime.disconnected') { this.connectionStatus = 'disconnected'; this.lastError = '运行时已断开'; return }
-      const payload: any = event.payload ?? {}
+      const payload = event.payload ?? {}
       const sessionId = String(event.session_id ?? payload.sessionId ?? payload.session_id ?? '')
       const runId = String(event.run_id ?? payload.runId ?? payload.run_id ?? '')
       const session = useSessionStore().getSession(sessionId)
@@ -175,12 +196,12 @@ export const useRuntimeStore = defineStore('runtime', {
         }
         session.status = 'running'
       }
-      if (event.type === 'run.completed') this.applyUpdate(payload)
+      if (event.type === 'run.completed') this.applyUpdate(payload as unknown as RuntimeUpdate)
       if (['approval.required', 'clarification.required', 'evaluation.required', 'run.input_required'].includes(event.type)) {
         this.addInterruption(sessionId, runId, payload)
       }
       if (session && event.type === 'plan.created') {
-        for (const raw of payload.tasks ?? []) {
+        for (const raw of records(payload.tasks)) {
           const task = normalizeTask(raw, sessionId, runId)
           const index = session.tasks.findIndex((item) => item.id === task.id)
           if (index >= 0) session.tasks[index] = task; else session.tasks.push(task)
@@ -209,7 +230,7 @@ export const useRuntimeStore = defineStore('runtime', {
     },
     async loadMcp() {
       const [catalog, connected, servers] = await Promise.all([
-        runtimeRequest<any>('mcp.package.catalog'), runtimeRequest<any>('mcp.package.list'), runtimeRequest<any>('mcp.server.list'),
+        runtimeRequest<McpCatalogResult>('mcp.package.catalog'), runtimeRequest<McpConnectionsResult>('mcp.package.list'), runtimeRequest<McpServersResult>('mcp.server.list'),
       ])
       this.packages = catalog.packages ?? []; this.pluginErrors = catalog.pluginErrors ?? {}; this.connections = connected.packages ?? []; this.serverConnections = servers.servers ?? []
     },

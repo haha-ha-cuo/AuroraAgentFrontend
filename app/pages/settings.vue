@@ -16,8 +16,9 @@ useHead({ title: '设置' })
 onMounted(() => runtime.loadMcp().catch((error) => message.error(String(error))))
 
 function defaultConfig(pkg: McpPackage) {
-  const properties = (pkg.configSchema as any)?.properties ?? {}
-  return Object.fromEntries(Object.entries(properties).flatMap(([key, value]: [string, any]) => Object.hasOwn(value, 'default') ? [[key, value.default]] : []))
+  const raw = pkg.configSchema.properties
+  const properties = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {}
+  return Object.fromEntries(Object.entries(properties).flatMap(([key, value]) => value && typeof value === 'object' && Object.hasOwn(value, 'default') ? [[key, (value as Record<string, unknown>).default]] : []))
 }
 
 function configText(pkg: McpPackage) {
