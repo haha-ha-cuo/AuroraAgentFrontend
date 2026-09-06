@@ -100,6 +100,38 @@ export interface RuntimeInfo {
   capabilities?: string[]
 }
 
+export type GitView = 'run' | 'workspace'
+
+export interface GitChange {
+  path: string
+  oldPath?: string | null
+  status: 'A' | 'M' | 'D' | 'R' | 'C' | 'T' | 'U'
+  staged: boolean
+  unstaged: boolean
+  untracked: boolean
+  binary: boolean
+  additions: number
+  deletions: number
+}
+
+export interface GitStatus {
+  view: GitView
+  runId?: string | null
+  branch: string
+  head?: string | null
+  unborn: boolean
+  files: GitChange[]
+  canRollback: boolean
+  rollbackReason: string
+}
+
+export interface GitDiff {
+  path: string
+  content: string
+  binary: boolean
+  truncated: boolean
+}
+
 export interface McpPackage {
   id: string
   name: string

@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { NIcon, NSpin } from 'naive-ui'
-import { AlertTriangle, Book, Check, Clock, Edit, File, Folder, Loader, Terminal2 } from '@vicons/tabler'
+import { NBadge, NButton, NIcon, NSpin } from 'naive-ui'
+import { AlertTriangle, Book, Check, Clock, Edit, File, FileDiff, Folder, Loader, Terminal2 } from '@vicons/tabler'
 import type { SessionRecord, TaskNode } from '~/types/agent'
 
 const props = defineProps<{ session: SessionRecord }>()
 const runtime = useRuntimeStore()
+const git = useGitStore()
 const scrollElement = ref<HTMLElement | null>(null)
+const showChanges = ref(false)
 const activeRun = computed(() => [...props.session.runs].reverse().find((run) => ['queued', 'running', 'waiting'].includes(run.status)))
 const orphanMessages = computed(() => props.session.messages.filter((message) => !message.runId))
 const timeline = computed(() => props.session.runs.map((run) => ({
@@ -16,6 +18,14 @@ const timeline = computed(() => props.session.runs.map((run) => ({
   requests: runtime.approvalsFor(props.session.id).filter((request) => request.runId === run.id),
 })))
 const statusText = computed(() => ({ idle: '就绪', queued: '排队中', running: '正在执行', waiting: '等待输入', completed: '已完成', failed: '执行失败', cancelled: '已取消' }[props.session.status]))
+const workspaceStatus = computed(() => git.statusFor(props.session.id, 'workspace'))
+
+async function refreshGit() {
+  try { await git.loadStatus(props.session.id, 'workspace') } catch { /* 抽屉中展示错误 */ }
+}
+
+onMounted(refreshGit)
+watch(() => props.session.updatedAt, () => { if (props.session.status === 'completed' || props.session.status === 'failed') refreshGit() })
 
 watch(
   () => [
@@ -62,7 +72,12 @@ function activityLabel(task: TaskNode) {
   <div class="conversation-view">
     <header class="conversation-header">
       <div class="title-row"><span class="folder-icon"><NIcon :component="Folder" :size="17" /></span><h1>{{ session.title }}</h1></div>
-      <span class="session-state" :class="session.status">{{ statusText }}</span>
+      <div class="header-actions">
+        <NBadge :value="workspaceStatus?.files.length || 0" :show="!!workspaceStatus?.files.length" :max="99">
+          <NButton quaternary size="small" @click="showChanges = true"><template #icon><NIcon :component="FileDiff" /></template>改动</NButton>
+        </NBadge>
+        <span class="session-state" :class="session.status">{{ statusText }}</span>
+      </div>
     </header>
 
     <main ref="scrollElement" class="conversation-scroll app-scrollbar">
@@ -105,11 +120,12 @@ function activityLabel(task: TaskNode) {
         <div v-if="session.status === 'running' && !activeRun" class="working-row"><NSpin :size="16" />Aurora 正在分析并规划任务</div>
       </div>
     </main>
+    <GitChangesDrawer v-model:show="showChanges" :session="session" />
   </div>
 </template>
 
 <style scoped>
-.conversation-view{display:grid;width:100%;height:100%;grid-template-rows:56px minmax(0,1fr);overflow:hidden}.conversation-header{display:flex;align-items:center;justify-content:space-between;padding:0 22px;border-bottom:1px solid var(--border);background:var(--surface)}.title-row{display:flex;min-width:0;align-items:center;gap:9px}.folder-icon{display:grid;width:29px;height:29px;place-items:center;border-radius:8px;background:var(--surface-muted);color:var(--text-muted)}.title-row h1{overflow:hidden;margin:0;font-size:14px;font-weight:650;text-overflow:ellipsis;white-space:nowrap}.session-state{padding:3px 8px;border-radius:99px;background:var(--surface-muted);color:var(--text-muted);font-size:11px}.session-state.running,.session-state.queued{color:#2563eb}.session-state.waiting{color:#b7791f}.session-state.completed{color:#16845b}.session-state.failed{color:#c33f3f}
+.conversation-view{display:grid;width:100%;height:100%;grid-template-rows:56px minmax(0,1fr);overflow:hidden}.conversation-header{display:flex;align-items:center;justify-content:space-between;padding:0 22px;border-bottom:1px solid var(--border);background:var(--surface)}.title-row{display:flex;min-width:0;align-items:center;gap:9px}.folder-icon{display:grid;width:29px;height:29px;place-items:center;border-radius:8px;background:var(--surface-muted);color:var(--text-muted)}.title-row h1{overflow:hidden;margin:0;font-size:14px;font-weight:650;text-overflow:ellipsis;white-space:nowrap}.header-actions{display:flex;align-items:center;gap:10px}.session-state{padding:3px 8px;border-radius:99px;background:var(--surface-muted);color:var(--text-muted);font-size:11px}.session-state.running,.session-state.queued{color:#2563eb}.session-state.waiting{color:#b7791f}.session-state.completed{color:#16845b}.session-state.failed{color:#c33f3f}
 .conversation-scroll{overflow:auto;padding:36px 34px 190px}.conversation-column{width:min(980px,100%);margin:0 auto}.run-section{padding:0 0 31px;margin:0 0 31px;border-bottom:1px solid var(--border)}.run-section:last-of-type{border-bottom:0}.user-block{margin:0 0 30px auto;width:fit-content;max-width:78%}.user-message{padding:10px 15px;border-radius:17px;background:var(--surface-muted);font-size:14px;line-height:1.65}.message-files{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:5px;margin-top:6px}.message-files span{display:flex;align-items:center;gap:4px;color:var(--text-muted);font-size:10px}.message-files svg{width:13px}
 .activity-feed{display:grid;gap:15px;margin:4px 0 27px}.activity-row{display:flex;min-height:20px;align-items:center;gap:9px;color:var(--text-muted);font-size:13px;line-height:1.45}.activity-row :deep(svg){flex:0 0 auto}.activity-row strong{color:var(--text-muted);font-weight:600}.activity-row span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.activity-row.failed,.activity-row.failed strong{color:#c33f3f}.activity-row.waiting,.activity-row.waiting strong{color:#b7791f}.activity-summary{margin-bottom:2px}.activity-summary span{font-weight:600}
 .assistant-message{position:relative;margin:0 0 25px}.assistant-message :deep(.markdown-content){font-size:15.5px;line-height:1.85}.assistant-message :deep(.markdown-content p){margin-bottom:17px}.cursor{display:inline-block;width:6px;height:15px;margin-left:2px;background:var(--text);animation:blink 1s steps(2) infinite}@keyframes blink{50%{opacity:0}}.error-message{display:flex;gap:9px;margin:10px 0 22px;padding:12px;border:1px solid rgb(209 67 67 / 30%);border-radius:9px;background:rgb(209 67 67 / 7%);color:#c33f3f;font-size:13px}.tool-message{margin:8px 0 20px;padding-left:26px;border-left:2px solid var(--border)}.tool-message :deep(.markdown-content){font-size:13px;color:var(--text-muted)}.working-row{display:flex;align-items:center;gap:9px;margin:18px 0;color:var(--text-muted);font-size:13px}

@@ -33,11 +33,16 @@ export const useProjectStore = defineStore('projects', {
     async get(id: string) {
       const project = this.byId(id)
       if (!project) throw new Error('工作区不存在')
-      await runtimeRequest('workspace.validate', { path: project.path })
+      let workspace = await runtimeRequest<WorkspaceResult>('workspace.validate', { path: project.path })
+      if (!workspace.isGitRepository) workspace = await runtimeRequest<WorkspaceResult>('workspace.git.initialize', { path: project.path })
+      project.isGitRepository = workspace.isGitRepository
+      project.writable = workspace.writable
+      this.persist()
       return project
     },
     async create(path: string) {
-      const workspace = await runtimeRequest<WorkspaceResult>('workspace.validate', { path })
+      let workspace = await runtimeRequest<WorkspaceResult>('workspace.validate', { path })
+      if (!workspace.isGitRepository) workspace = await runtimeRequest<WorkspaceResult>('workspace.git.initialize', { path: workspace.path })
       const existing = this.projects.find((item) => item.path === workspace.path)
       if (existing) { this.activeProjectId = existing.id; this.persist(); return existing }
       const now = new Date().toISOString()

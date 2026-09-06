@@ -117,6 +117,8 @@ export const useRuntimeStore = defineStore('runtime', {
         return update
       } catch (error) {
         session.status = 'failed'
+        const failedRun = [...session.runs].reverse().find((item) => ['queued', 'running', 'waiting'].includes(item.status))
+        if (failedRun) { failedRun.status = 'failed'; failedRun.error = error instanceof Error ? error.message : String(error); failedRun.updatedAt = new Date().toISOString() }
         session.messages.push({
           id: `message_${crypto.randomUUID()}`, sessionId, role: 'assistant', content: error instanceof Error ? error.message : String(error),
           createdAt: new Date().toISOString(), status: 'failed', kind: 'error', attachments: [],
@@ -127,12 +129,20 @@ export const useRuntimeStore = defineStore('runtime', {
     async resumeInput(id: string, response: unknown) {
       const request = this.approvals.find((item) => item.id === id)
       if (!request) throw new Error('待处理请求不存在')
-      const update = await runtimeRequest<RuntimeUpdate>('run.resume', {
-        sessionId: request.sessionId, runId: request.runId,
-        interruptId: request.interruptId || request.id, response,
-      })
-      request.status = response === false || (isRecord(response) && response.approved === false) ? 'rejected' : 'approved'
-      this.applyUpdate(update)
+      try {
+        const update = await runtimeRequest<RuntimeUpdate>('run.resume', {
+          sessionId: request.sessionId, runId: request.runId,
+          interruptId: request.interruptId || request.id, response,
+        })
+        request.status = response === false || (isRecord(response) && response.approved === false) ? 'rejected' : 'approved'
+        this.applyUpdate(update)
+      } catch (error) {
+        const session = useSessionStore().getSession(request.sessionId)
+        const run = session?.runs.find((item) => item.id === request.runId)
+        if (session) session.status = 'failed'
+        if (run) { run.status = 'failed'; run.error = error instanceof Error ? error.message : String(error); run.updatedAt = new Date().toISOString() }
+        throw error
+      }
     },
     async resolveApproval(id: string, approved: boolean) { await this.resumeInput(id, { approved }) },
     applyUpdate(update: RuntimeUpdate) {
